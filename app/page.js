@@ -12,9 +12,13 @@ const emptyForm = {
   answer: '', source: '原创', sourceDetail: '', author: '', institution: '', email: '',
 }
 
+const DRAFT_KEY = 'nutribench-draft-v1'
+const RUBRIC_TOTAL = 10
+
 export default function Home() {
   const [tab, setTab] = useState('submit')
   const [form, setForm] = useState({ ...emptyForm })
+  const [draftLoaded, setDraftLoaded] = useState(false)
   const [questions, setQuestions] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -22,7 +26,24 @@ export default function Home() {
   const [toast, setToast] = useState(null)
   const [expanded, setExpanded] = useState(null)
 
-  useEffect(() => { fetchQuestions() }, [])
+  useEffect(() => {
+    fetchQuestions()
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object') setForm({ ...emptyForm, ...parsed })
+      }
+    } catch {}
+    setDraftLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftLoaded) return
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch {}
+  }, [form, draftLoaded])
+
+  const rubricTotal = form.rubrics.reduce((s, r) => s + (Number(r.score) || 0), 0)
 
   async function fetchQuestions() {
     setLoading(true)
@@ -74,6 +95,10 @@ export default function Home() {
       showToast('至少需要 3 个采分点', true)
       return
     }
+    if (rubricTotal !== RUBRIC_TOTAL) {
+      showToast(`采分点总分必须为 ${RUBRIC_TOTAL} 分（当前 ${rubricTotal} 分）`, true)
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/questions', {
@@ -83,6 +108,7 @@ export default function Home() {
       })
       if (res.ok) {
         showToast('提交成功！')
+        try { localStorage.removeItem(DRAFT_KEY) } catch {}
         setForm({ ...emptyForm })
         fetchQuestions()
         setTab('list')
@@ -151,7 +177,18 @@ export default function Home() {
           </div>
 
           <div className="form-section">
-            <h3>采分点 Rubric <span className="hint">（至少 3 个，最多 5 个，建议总分 10 分）</span></h3>
+            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>采分点 Rubric <span className="hint">（至少 3 个，最多 5 个，总分须为 {RUBRIC_TOTAL} 分）</span></span>
+              <span style={{
+                fontFamily: 'var(--mono)',
+                fontSize: 13,
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: rubricTotal === RUBRIC_TOTAL ? 'var(--accent-light)' : '#fef2f2',
+                color: rubricTotal === RUBRIC_TOTAL ? 'var(--accent)' : 'var(--danger)',
+                border: `1px solid ${rubricTotal === RUBRIC_TOTAL ? 'var(--accent)' : 'var(--danger)'}`,
+              }}>{rubricTotal} / {RUBRIC_TOTAL}</span>
+            </h3>
             {form.rubrics.map((r, i) => (
               <div className="rubric-item" key={i}>
                 <input value={r.desc} onChange={e => updateRubric(i, 'desc', e.target.value)}
