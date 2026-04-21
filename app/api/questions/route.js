@@ -91,3 +91,44 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Failed to submit question' }, { status: 500 })
   }
 }
+
+export async function PATCH(request) {
+  try {
+    const data = await request.json()
+    if (!data.id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    }
+
+    const properties = {
+      '题目标题': { title: [{ text: { content: String(data.title || '').slice(0, NOTION_TEXT_CHUNK) } }] },
+      '难度等级': { select: { name: data.level } },
+      '领域大类': { select: { name: data.domain } },
+      '领域小类': { rich_text: richText(data.subdomain) },
+      '题目正文': { rich_text: richText(data.question) },
+      '参考答案': { rich_text: richText(data.answer) },
+      '题目来源': { select: { name: data.source } },
+      '来源详情': { rich_text: richText(data.sourceDetail) },
+      '出题人姓名': { rich_text: richText(data.author) },
+      '出题人单位': { rich_text: richText(data.institution) },
+      '出题人邮箱': { email: data.email },
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const r = data.rubrics?.[i]
+      if (r && r.desc) {
+        properties[`采分点${i + 1}-描述`] = { rich_text: richText(r.desc) }
+        properties[`采分点${i + 1}-分值`] = { number: Number(r.score) || 0 }
+      } else {
+        properties[`采分点${i + 1}-描述`] = { rich_text: [] }
+        properties[`采分点${i + 1}-分值`] = { number: null }
+      }
+    }
+
+    await notion.pages.update({ page_id: data.id, properties })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Notion update error:', error)
+    return NextResponse.json({ error: 'Failed to update question' }, { status: 500 })
+  }
+}

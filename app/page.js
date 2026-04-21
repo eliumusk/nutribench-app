@@ -18,6 +18,7 @@ const RUBRIC_TOTAL = 10
 export default function Home() {
   const [tab, setTab] = useState('submit')
   const [form, setForm] = useState({ ...emptyForm })
+  const [editingId, setEditingId] = useState(null)
   const [draftLoaded, setDraftLoaded] = useState(false)
   const [questions, setQuestions] = useState([])
   const [total, setTotal] = useState(0)
@@ -40,8 +41,48 @@ export default function Home() {
 
   useEffect(() => {
     if (!draftLoaded) return
+    if (editingId) return
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch {}
-  }, [form, draftLoaded])
+  }, [form, draftLoaded, editingId])
+
+  function startEdit(q) {
+    const rubrics = (q.rubrics && q.rubrics.length >= 3)
+      ? q.rubrics.map(r => ({ desc: r.desc || '', score: r.score ?? '' }))
+      : [...(q.rubrics || []).map(r => ({ desc: r.desc || '', score: r.score ?? '' })),
+         ...Array.from({ length: 3 - (q.rubrics?.length || 0) }, () => ({ desc: '', score: '' }))]
+    setForm({
+      title: q.title || '',
+      level: q.level || '',
+      domain: q.domain || '',
+      subdomain: q.subdomain || '',
+      question: q.question || '',
+      rubrics,
+      answer: q.answer || '',
+      source: q.source || '原创',
+      sourceDetail: q.sourceDetail || '',
+      author: q.author || '',
+      institution: q.institution || '',
+      email: q.email || '',
+    })
+    setEditingId(q.id)
+    setTab('submit')
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed && typeof parsed === 'object') {
+          setForm({ ...emptyForm, ...parsed })
+          return
+        }
+      }
+    } catch {}
+    setForm({ ...emptyForm })
+  }
 
   const rubricTotal = form.rubrics.reduce((s, r) => s + (Number(r.score) || 0), 0)
 
@@ -101,19 +142,29 @@ export default function Home() {
     }
     setSubmitting(true)
     try {
+      const isEdit = Boolean(editingId)
       const res = await fetch('/api/questions', {
-        method: 'POST',
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(isEdit ? { ...form, id: editingId } : form),
       })
       if (res.ok) {
-        showToast('提交成功！')
-        try { localStorage.removeItem(DRAFT_KEY) } catch {}
-        setForm({ ...emptyForm })
+        showToast(isEdit ? '更新成功！' : '提交成功！')
+        if (isEdit) {
+          setEditingId(null)
+          try {
+            const saved = localStorage.getItem(DRAFT_KEY)
+            const parsed = saved ? JSON.parse(saved) : null
+            setForm(parsed && typeof parsed === 'object' ? { ...emptyForm, ...parsed } : { ...emptyForm })
+          } catch { setForm({ ...emptyForm }) }
+        } else {
+          try { localStorage.removeItem(DRAFT_KEY) } catch {}
+          setForm({ ...emptyForm })
+        }
         fetchQuestions()
         setTab('list')
       } else {
-        showToast('提交失败，请重试', true)
+        showToast(isEdit ? '更新失败，请重试' : '提交失败，请重试', true)
       }
     } catch (e) {
       showToast('网络错误', true)
@@ -143,6 +194,26 @@ export default function Home() {
 
       {tab === 'submit' && (
         <form onSubmit={handleSubmit}>
+          {editingId && (
+            <div style={{
+              padding: '10px 14px',
+              marginBottom: 16,
+              borderRadius: 6,
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              color: '#92400e',
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <span>✏️ 正在编辑已提交的题目（提交后将覆盖原内容）</span>
+              <button type="button" onClick={cancelEdit}
+                style={{ background: 'transparent', border: '1px solid #92400e', color: '#92400e', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
+                取消编辑
+              </button>
+            </div>
+          )}
           <div className="form-section">
             <h3>题目信息</h3>
             <div className="field">
@@ -245,7 +316,7 @@ export default function Home() {
           </div>
 
           <button type="submit" className="btn-submit" disabled={submitting}>
-            {submitting ? '提交中...' : '提交题目'}
+            {submitting ? (editingId ? '更新中...' : '提交中...') : (editingId ? '保存修改' : '提交题目')}
           </button>
         </form>
       )}
@@ -284,6 +355,13 @@ export default function Home() {
                       <div style={{ fontSize: 13, color: '#57534e', whiteSpace: 'pre-wrap', background: '#fafaf9', padding: 12, borderRadius: 6, lineHeight: 1.7 }}>{q.answer}</div>
                     </div>
                   )}
+                  <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); startEdit(q) }}
+                      style={{ padding: '6px 14px', fontSize: 13, border: '1px solid var(--accent)', background: 'white', color: 'var(--accent)', borderRadius: 6, cursor: 'pointer' }}>
+                      ✏️ 编辑此题
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="preview">{q.question}</div>
