@@ -9,7 +9,7 @@ const LEVEL_BADGE = { 'L1 知识检索': 'badge-l1', 'L2 机制推理': 'badge-l
 const emptyForm = {
   title: '', level: '', domain: '', subdomain: '', question: '',
   rubrics: [{ desc: '', score: '' }, { desc: '', score: '' }, { desc: '', score: '' }],
-  answer: '', source: '原创', sourceDetail: '', author: '', institution: '', email: '',
+  source: '原创', sourceDetail: '', author: '', institution: '', email: '',
 }
 
 const DRAFT_KEY = 'nutribench-draft-v1'
@@ -57,7 +57,6 @@ export default function Home() {
       subdomain: q.subdomain || '',
       question: q.question || '',
       rubrics,
-      answer: q.answer || '',
       source: q.source || '原创',
       sourceDetail: q.sourceDetail || '',
       author: q.author || '',
@@ -128,7 +127,7 @@ export default function Home() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.title || !form.level || !form.domain || !form.question || !form.author || !form.institution || !form.email) {
+    if (!form.title || !form.level || !form.domain || !form.question || !form.author || !form.institution) {
       showToast('请填写所有必填字段', true)
       return
     }
@@ -260,12 +259,41 @@ export default function Home() {
                 border: `1px solid ${rubricTotal === RUBRIC_TOTAL ? 'var(--accent)' : 'var(--danger)'}`,
               }}>{rubricTotal} / {RUBRIC_TOTAL}</span>
             </h3>
+
+            <div style={{
+              background: '#fffbeb',
+              border: '1px solid #fcd34d',
+              borderRadius: 6,
+              padding: '12px 14px',
+              marginBottom: 16,
+              fontSize: 13,
+              lineHeight: 1.7,
+              color: '#78350f',
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>📌 采分点不再需要单独参考答案，请把标准答案的关键事实逐条拆进采分点里，越细越好。</div>
+              <div style={{ marginBottom: 4 }}>每条采分点应当是一个<strong>可独立判断对错的具体事实/结论/数据</strong>，而不是泛泛的"答对要点"。（示例问题：在斑马鱼中，基因waslb的功能获得模型如何影响胚胎的鳍发育？请具体说明。）：</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, background: '#fff', border: '1px solid #fde68a', borderRadius: 4, padding: '8px 10px', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+{`采分点写法示例
+• 鳍的发育在辐射骨 (radials) 中发生改变
+• 正常硬骨鱼鳍中形成近端和远端辐射骨，在这些突变体中，于正常辐射骨行之间发现了中间辐射骨
+• 鳍褶 (fin fold) 不受影响
+• 鳍条 (fin rays) 不受影响`}
+              </div>
+              <div style={{ marginTop: 8, color: '#92400e' }}>
+                ✅ 好示例：写明<u>具体结构名、观察到的现象、基因/通路名称、数值范围（如有）</u>。<br/>
+                ❌ 反例："正确描述鳍发育变化" / "答出关键点" / "理解基因功能" —— 这种无法客观判分，请避免。
+              </div>
+            </div>
+
             {form.rubrics.map((r, i) => (
               <div className="rubric-item" key={i}>
-                <input value={r.desc} onChange={e => updateRubric(i, 'desc', e.target.value)}
-                  placeholder={`采分点 ${i + 1} 的描述（需可判断，如"正确列出 ≥5 个关键酶基因"）`} />
+                <textarea value={r.desc} onChange={e => updateRubric(i, 'desc', e.target.value)}
+                  placeholder={i === 0
+                    ? `采分点 ${i + 1}：请写详细、可独立判断对错的具体采分点（可多行展开）。`
+                    : `采分点 ${i + 1}：一个具体采分点。`}
+                  style={{ minHeight: 110, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
                 <input type="number" value={r.score} onChange={e => updateRubric(i, 'score', e.target.value)}
-                  placeholder="分值" min="0" max="10" />
+                  placeholder="分值" min="0" max="10" step="0.25" />
                 <button type="button" className="btn-remove" onClick={() => removeRubric(i)}
                   disabled={form.rubrics.length <= 3}>×</button>
               </div>
@@ -273,15 +301,6 @@ export default function Home() {
             {form.rubrics.length < 5 && (
               <button type="button" className="btn-add" onClick={addRubric}>+ 添加采分点</button>
             )}
-          </div>
-
-          <div className="form-section">
-            <h3>参考答案</h3>
-            <div className="field">
-              <label>参考答案 <span className="hint">L1-L2 必填，L3-L4 强烈建议</span></label>
-              <textarea value={form.answer} onChange={e => updateForm('answer', e.target.value)}
-                placeholder="专家级别的完整参考答案" style={{ minHeight: '160px' }} />
-            </div>
           </div>
 
           <div className="form-section">
@@ -309,7 +328,7 @@ export default function Home() {
                 <input value={form.institution} onChange={e => updateForm('institution', e.target.value)} />
               </div>
               <div className="field">
-                <label>出题人邮箱 <span className="required">*</span></label>
+                <label>出题人邮箱 <span className="hint">选填，便于后续联系</span></label>
                 <input type="email" value={form.email} onChange={e => updateForm('email', e.target.value)} />
               </div>
             </div>
@@ -342,17 +361,11 @@ export default function Home() {
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>采分点：</div>
                       {q.rubrics.map((r, i) => (
-                        <div key={i} style={{ fontSize: 13, color: '#57534e', marginBottom: 4 }}>
+                        <div key={i} style={{ fontSize: 13, color: '#57534e', marginBottom: 8, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
                           <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent)', marginRight: 8 }}>[{r.score}分]</span>
                           {r.desc}
                         </div>
                       ))}
-                    </div>
-                  )}
-                  {q.answer && (
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>参考答案：</div>
-                      <div style={{ fontSize: 13, color: '#57534e', whiteSpace: 'pre-wrap', background: '#fafaf9', padding: 12, borderRadius: 6, lineHeight: 1.7 }}>{q.answer}</div>
                     </div>
                   )}
                   <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>

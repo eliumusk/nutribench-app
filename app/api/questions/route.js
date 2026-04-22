@@ -38,7 +38,6 @@ export async function GET() {
           desc: join(p[`采分点${i}-描述`]?.rich_text),
           score: p[`采分点${i}-分值`]?.number || 0,
         })).filter(r => r.desc),
-        answer: join(p['参考答案']?.rich_text),
         source: p['题目来源']?.select?.name || '',
         sourceDetail: join(p['来源详情']?.rich_text),
         author: join(p['出题人姓名']?.rich_text),
@@ -64,12 +63,11 @@ export async function POST(request) {
       '领域大类': { select: { name: data.domain } },
       '领域小类': { rich_text: richText(data.subdomain) },
       '题目正文': { rich_text: richText(data.question) },
-      '参考答案': { rich_text: richText(data.answer) },
       '题目来源': { select: { name: data.source } },
       '来源详情': { rich_text: richText(data.sourceDetail) },
       '出题人姓名': { rich_text: richText(data.author) },
       '出题人单位': { rich_text: richText(data.institution) },
-      '出题人邮箱': { email: data.email },
+      '出题人邮箱': { email: data.email ? String(data.email).trim() || null : null },
     }
 
     // Add rubric points
@@ -105,12 +103,11 @@ export async function PATCH(request) {
       '领域大类': { select: { name: data.domain } },
       '领域小类': { rich_text: richText(data.subdomain) },
       '题目正文': { rich_text: richText(data.question) },
-      '参考答案': { rich_text: richText(data.answer) },
       '题目来源': { select: { name: data.source } },
       '来源详情': { rich_text: richText(data.sourceDetail) },
       '出题人姓名': { rich_text: richText(data.author) },
       '出题人单位': { rich_text: richText(data.institution) },
-      '出题人邮箱': { email: data.email },
+      '出题人邮箱': { email: data.email ? String(data.email).trim() || null : null },
     }
 
     for (let i = 0; i < 5; i++) {

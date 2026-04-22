@@ -36,7 +36,7 @@ git push -u origin main
 
 | 变量名 | 值 |
 |--------|-----|
-| `NOTION_API_KEY` | 第一步获取的 `ntn_xxx...` |
+| `NOTION_API_KEY` | `ntn_xxx` |
 | `NOTION_DATABASE_ID` | `e755b041d920410fa6dd3aa88c421879` |
 
 4. 点击 Deploy
