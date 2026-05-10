@@ -5,15 +5,17 @@ const LEVELS = ['L1 知识检索', 'L2 机制推理', 'L3 实验方案', 'L4 通
 const DOMAINS = ['糖', '脂肪', '蛋白', '微量元素', '维生素', '天然产物']
 const SOURCES = ['原创', '改编自论文/教材']
 const LEVEL_BADGE = { 'L1 知识检索': 'badge-l1', 'L2 机制推理': 'badge-l2', 'L3 实验方案': 'badge-l3', 'L4 通路推测': 'badge-l4' }
+const MIN_RUBRIC_COUNT = 3
+const MAX_RUBRIC_COUNT = 10
+const RUBRIC_TOTAL = 10
 
 const emptyForm = {
   title: '', level: '', domain: '', subdomain: '', question: '',
-  rubrics: [{ desc: '', score: '' }, { desc: '', score: '' }, { desc: '', score: '' }],
+  rubrics: Array.from({ length: MIN_RUBRIC_COUNT }, () => ({ desc: '', score: '' })),
   source: '原创', sourceDetail: '', author: '', institution: '', email: '',
 }
 
 const DRAFT_KEY = 'nutribench-draft-v1'
-const RUBRIC_TOTAL = 10
 
 export default function Home() {
   const [tab, setTab] = useState('submit')
@@ -46,10 +48,10 @@ export default function Home() {
   }, [form, draftLoaded, editingId])
 
   function startEdit(q) {
-    const rubrics = (q.rubrics && q.rubrics.length >= 3)
+    const rubrics = (q.rubrics && q.rubrics.length >= MIN_RUBRIC_COUNT)
       ? q.rubrics.map(r => ({ desc: r.desc || '', score: r.score ?? '' }))
       : [...(q.rubrics || []).map(r => ({ desc: r.desc || '', score: r.score ?? '' })),
-         ...Array.from({ length: 3 - (q.rubrics?.length || 0) }, () => ({ desc: '', score: '' }))]
+         ...Array.from({ length: MIN_RUBRIC_COUNT - (q.rubrics?.length || 0) }, () => ({ desc: '', score: '' }))]
     setForm({
       title: q.title || '',
       level: q.level || '',
@@ -114,13 +116,13 @@ export default function Home() {
   }
 
   function addRubric() {
-    if (form.rubrics.length < 5) {
+    if (form.rubrics.length < MAX_RUBRIC_COUNT) {
       setForm(f => ({ ...f, rubrics: [...f.rubrics, { desc: '', score: '' }] }))
     }
   }
 
   function removeRubric(index) {
-    if (form.rubrics.length > 3) {
+    if (form.rubrics.length > MIN_RUBRIC_COUNT) {
       setForm(f => ({ ...f, rubrics: f.rubrics.filter((_, i) => i !== index) }))
     }
   }
@@ -131,8 +133,13 @@ export default function Home() {
       showToast('请填写所有必填字段', true)
       return
     }
-    if (form.rubrics.filter(r => r.desc).length < 3) {
-      showToast('至少需要 3 个采分点', true)
+    const rubricCount = form.rubrics.filter(r => r.desc).length
+    if (rubricCount < MIN_RUBRIC_COUNT) {
+      showToast(`至少需要 ${MIN_RUBRIC_COUNT} 个采分点`, true)
+      return
+    }
+    if (rubricCount > MAX_RUBRIC_COUNT) {
+      showToast(`最多只能有 ${MAX_RUBRIC_COUNT} 个采分点`, true)
       return
     }
     if (rubricTotal !== RUBRIC_TOTAL) {
@@ -248,7 +255,7 @@ export default function Home() {
 
           <div className="form-section">
             <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>采分点 Rubric <span className="hint">（至少 3 个，最多 5 个，总分须为 {RUBRIC_TOTAL} 分）</span></span>
+              <span>采分点 Rubric <span className="hint">（至少 {MIN_RUBRIC_COUNT} 个，最多 {MAX_RUBRIC_COUNT} 个，总分须为 {RUBRIC_TOTAL} 分）</span></span>
               <span style={{
                 fontFamily: 'var(--mono)',
                 fontSize: 13,
@@ -295,10 +302,10 @@ export default function Home() {
                 <input type="number" value={r.score} onChange={e => updateRubric(i, 'score', e.target.value)}
                   placeholder="分值" min="0" max="10" step="0.25" />
                 <button type="button" className="btn-remove" onClick={() => removeRubric(i)}
-                  disabled={form.rubrics.length <= 3}>×</button>
+                  disabled={form.rubrics.length <= MIN_RUBRIC_COUNT}>×</button>
               </div>
             ))}
-            {form.rubrics.length < 5 && (
+            {form.rubrics.length < MAX_RUBRIC_COUNT && (
               <button type="button" className="btn-add" onClick={addRubric}>+ 添加采分点</button>
             )}
           </div>

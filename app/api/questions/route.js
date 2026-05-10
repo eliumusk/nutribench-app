@@ -5,6 +5,7 @@ const notion = new Client({ auth: process.env.NOTION_API_KEY })
 const databaseId = process.env.NOTION_DATABASE_ID
 
 const NOTION_TEXT_CHUNK = 2000
+const MAX_RUBRICS = 10
 
 function richText(content) {
   const s = String(content ?? '')
@@ -34,7 +35,7 @@ export async function GET() {
         domain: p['领域大类']?.select?.name || '',
         subdomain: join(p['领域小类']?.rich_text),
         question: join(p['题目正文']?.rich_text),
-        rubrics: [1,2,3,4,5].map(i => ({
+        rubrics: Array.from({ length: MAX_RUBRICS }, (_, i) => i + 1).map(i => ({
           desc: join(p[`采分点${i}-描述`]?.rich_text),
           score: p[`采分点${i}-分值`]?.number || 0,
         })).filter(r => r.desc),
@@ -70,9 +71,8 @@ export async function POST(request) {
       '出题人邮箱': { email: data.email ? String(data.email).trim() || null : null },
     }
 
-    // Add rubric points
-    data.rubrics.forEach((r, i) => {
-      if (i < 5 && r.desc) {
+    ;(data.rubrics || []).slice(0, MAX_RUBRICS).forEach((r, i) => {
+      if (r.desc) {
         properties[`采分点${i + 1}-描述`] = { rich_text: richText(r.desc) }
         properties[`采分点${i + 1}-分值`] = { number: Number(r.score) || 0 }
       }
@@ -110,7 +110,7 @@ export async function PATCH(request) {
       '出题人邮箱': { email: data.email ? String(data.email).trim() || null : null },
     }
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < MAX_RUBRICS; i++) {
       const r = data.rubrics?.[i]
       if (r && r.desc) {
         properties[`采分点${i + 1}-描述`] = { rich_text: richText(r.desc) }
