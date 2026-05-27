@@ -16,3 +16,11 @@ test('questions API reads and writes up to 10 rubric fields', () => {
   assert.doesNotMatch(route, /\[\s*1\s*,\s*2\s*,\s*3\s*,\s*4\s*,\s*5\s*\]/)
   assert.doesNotMatch(route, /i < 5\b/)
 })
+
+test('questions API paginates through all Notion results', () => {
+  assert.match(route, /while\s*\(\s*true\s*\)/)
+  assert.match(route, /start_cursor/)
+  assert.match(route, /has_more/)
+  assert.match(route, /next_cursor/)
+  assert.match(route, /results\.push\(\.\.\.response\.results\)/)
+})

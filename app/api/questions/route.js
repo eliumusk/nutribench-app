@@ -19,13 +19,25 @@ function richText(content) {
 
 export async function GET() {
   try {
-    const response = await notion.databases.query({
-      database_id: databaseId,
-      sorts: [{ timestamp: 'created_time', direction: 'descending' }],
-    })
+    const results = []
+    let startCursor
+
+    while (true) {
+      const query = {
+        database_id: databaseId,
+        sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+      }
+      if (startCursor) query.start_cursor = startCursor
+
+      const response = await notion.databases.query(query)
+      results.push(...response.results)
+
+      if (!response.has_more || !response.next_cursor) break
+      startCursor = response.next_cursor
+    }
 
     const join = (rt) => (rt || []).map((t) => t.plain_text || '').join('')
-    const questions = response.results.map((page) => {
+    const questions = results.map((page) => {
       const p = page.properties
       return {
         id: page.id,
@@ -47,7 +59,7 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json({ questions, total: response.results.length })
+    return NextResponse.json({ questions, total: results.length })
   } catch (error) {
     console.error('Notion query error:', error)
     return NextResponse.json({ error: 'Failed to fetch questions' }, { status: 500 })
