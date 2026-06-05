@@ -17,6 +17,70 @@ const emptyForm = {
 
 const DRAFT_KEY = 'nutribench-draft-v1'
 
+const TIER_DISPLAY = {
+  too_simple: {
+    cls: 'tier-simple',
+    icon: '⚠️',
+    title: '题目可能偏简单',
+    advice: '强模型已能拿到高分，建议提高难度——增加更深的机制推理、更细的数据/文献要求，或更刁钻的边界条件，让题目更有区分度。',
+  },
+  moderate: {
+    cls: 'tier-mid',
+    icon: '🟡',
+    title: '难度中等',
+    advice: '已有一定区分度。若想进一步拉开模型差距，可酌情加难。',
+  },
+  good: {
+    cls: 'tier-good',
+    icon: '🟢',
+    title: '区分度良好',
+    advice: '强模型也只拿到较低分，是一道有挑战性的好题 👍',
+  },
+}
+
+function EstimatePanel({ estimate }) {
+  const { percent, earned, max, tier, perRubric = [], answer, answerModel = 'gpt-5.5', judgeModel = 'deepseek-v4-flash' } = estimate
+  const t = TIER_DISPLAY[tier] || TIER_DISPLAY.moderate
+  const pct = Math.round(percent)
+  return (
+    <div className="estimate-result">
+      <div className="estimate-head">
+        <div className={`estimate-score ${t.cls}`}>
+          <span className="estimate-pct">{pct}%</span>
+          <span className="estimate-frac">{earned} / {max} 分</span>
+        </div>
+        <div className={`estimate-banner ${t.cls}`}>
+          <div className="estimate-banner-title">{t.icon} {t.title}</div>
+          <div className="estimate-banner-advice">{t.advice}</div>
+        </div>
+      </div>
+
+      <div className="estimate-rubrics">
+        {perRubric.map((r) => (
+          <div className="estimate-rubric-row" key={r.index}>
+            <span className={`estimate-rubric-score ${r.awarded >= r.max ? 'full' : r.awarded <= 0 ? 'zero' : 'partial'}`}>
+              {r.awarded} / {r.max}
+            </span>
+            <div className="estimate-rubric-body">
+              <div className="estimate-rubric-desc">{r.desc}</div>
+              {r.reason && <div className="estimate-rubric-reason">裁判：{r.reason}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <details className="estimate-answer">
+        <summary>查看 {answerModel} 的试答全文</summary>
+        <div className="estimate-answer-body">{answer}</div>
+      </details>
+
+      <div className="estimate-foot">
+        ⚠️ 仅供参考：由 {answerModel} 试答、{judgeModel} 按采分点评分估算，单次采样可能略有波动，不代表最终评测分。
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const [tab, setTab] = useState('submit')
   const [form, setForm] = useState({ ...emptyForm })
@@ -28,6 +92,8 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState(null)
   const [expanded, setExpanded] = useState(null)
+  const [estimating, setEstimating] = useState(false)
+  const [estimate, setEstimate] = useState(null)
 
   useEffect(() => {
     fetchQuestions()
@@ -46,6 +112,11 @@ export default function Home() {
     if (editingId) return
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch {}
   }, [form, draftLoaded, editingId])
+
+  // 题面或采分点描述一改动，旧估分即失效，自动清空避免误导
+  useEffect(() => {
+    setEstimate(null)
+  }, [form.question, form.rubrics.map(r => r.desc).join('')])
 
   function startEdit(q) {
     const rubrics = (q.rubrics && q.rubrics.length >= MIN_RUBRIC_COUNT)
@@ -125,6 +196,29 @@ export default function Home() {
     if (form.rubrics.length > MIN_RUBRIC_COUNT) {
       setForm(f => ({ ...f, rubrics: f.rubrics.filter((_, i) => i !== index) }))
     }
+  }
+
+  async function handleEstimate() {
+    if (!form.question.trim()) { showToast('请先填写题目正文', true); return }
+    if (form.rubrics.filter(r => r.desc.trim()).length < 1) { showToast('请先填写至少一个采分点', true); return }
+    setEstimating(true)
+    setEstimate(null)
+    try {
+      const res = await fetch('/api/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title, level: form.level, domain: form.domain,
+          subdomain: form.subdomain, question: form.question, rubrics: form.rubrics,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) setEstimate(data)
+      else showToast(data.error || '估分失败，请重试', true)
+    } catch (e) {
+      showToast('网络错误，估分失败', true)
+    }
+    setEstimating(false)
   }
 
   async function handleSubmit(e) {
@@ -308,6 +402,28 @@ export default function Home() {
             {form.rubrics.length < MAX_RUBRIC_COUNT && (
               <button type="button" className="btn-add" onClick={addRubric}>+ 添加采分点</button>
             )}
+          </div>
+
+          <div className="form-section">
+            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <span>🤖 AI 难度自检 <span className="hint">让 gpt-5.5 试答，再按采分点自动评分，预估强模型得分</span></span>
+              <button type="button" className="btn-estimate" onClick={handleEstimate} disabled={estimating}>
+                {estimating ? '估分中…（约 10–40 秒）' : '▶ 开始估分'}
+              </button>
+            </h3>
+
+            {!estimate && !estimating && (
+              <div className="estimate-hint">
+                写完<strong>题目正文</strong>和<strong>采分点</strong>后点「开始估分」：系统会让 gpt-5.5 试答这道题，再按你的采分点自动打分。
+                若强模型轻松拿到 <strong>80% 以上</strong>，说明题目可能偏简单，建议加大难度。
+              </div>
+            )}
+
+            {estimating && (
+              <div className="loading">🤖 正在让 gpt-5.5 试答并按采分点打分，请稍候…（不会影响你继续编辑）</div>
+            )}
+
+            {estimate && <EstimatePanel estimate={estimate} />}
           </div>
 
           <div className="form-section">

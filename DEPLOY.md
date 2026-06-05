@@ -38,8 +38,15 @@ git push -u origin main
 |--------|-----|
 | `NOTION_API_KEY` | `ntn_xxx` |
 | `NOTION_DATABASE_ID` | `e755b041d920410fa6dd3aa88c421879` |
+| `ESTIMATE_BASE_URL` | `http://43.159.131.233:3001/v1` |
+| `ESTIMATE_API_KEY` | `sk-xxx`（模型端点的 key） |
+| `ESTIMATE_ANSWER_MODEL` | `gpt-5.5`（试答模型） |
+| `ESTIMATE_JUDGE_MODEL` | `deepseek-v4-flash`（评分模型，独立裁判） |
 
 4. 点击 Deploy
+
+> 这几个变量用于出题页的「AI 难度自检」：让 gpt-5.5 试答题目，再由独立的 deepseek-v4-flash 按采分点评分，预估强模型得分。
+> 该功能会发起两次 LLM 调用（试答 + 评分），耗时约 10–40 秒；Vercel Hobby 计划函数超时上限为 60 秒，若经常超时建议升级 Pro 或缩短题面。
 
 部署完成后你会得到一个 `xxx.vercel.app` 链接，把这个链接发给所有出题团队就行。
 
