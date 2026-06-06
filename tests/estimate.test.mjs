@@ -53,8 +53,9 @@ test('estimate API route does the two-step answer+judge against gpt-5.4', () => 
   const route = readFileSync(new URL('../app/api/estimate/route.js', import.meta.url), 'utf8')
   assert.match(route, /ANSWER_MODEL/)
   assert.match(route, /JUDGE_MODEL/)
-  assert.match(route, /deepseek-v4-flash/)   // 答题与评分都用 flash（Vercel 60s 内不超时）
-  assert.match(route, /advice/)              // 评分附带一句简短建议
+  assert.match(route, /deepseek-v4-flash/)   // 答题/评分/建议都用 flash（Vercel 60s 内不超时）
+  assert.match(route, /ADVICE_SYSTEM/)       // 第三步：独立生成针对性建议
+  assert.match(route, /advicePrompt/)
   assert.match(route, /ANSWER_SYSTEM/)
   assert.match(route, /JUDGE_SYSTEM/)
   assert.match(route, /summarizeScores/)

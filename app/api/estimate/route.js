@@ -11,10 +11,13 @@ const API_KEY = process.env.ESTIMATE_API_KEY || process.env.DEEPSEEK_API_KEY || 
 // gpt-5.x / deepseek-*-thinking 这类推理模型答一道复杂题要 90s+，必被 Vercel 掐断。
 const ANSWER_MODEL = process.env.ESTIMATE_ANSWER_MODEL || process.env.ESTIMATE_MODEL || 'deepseek-v4-flash'
 const JUDGE_MODEL = process.env.ESTIMATE_JUDGE_MODEL || 'deepseek-v4-flash'
+// 第三步"针对性建议"模型：默认同评分模型
+const ADVICE_MODEL = process.env.ESTIMATE_ADVICE_MODEL || JUDGE_MODEL
 
 // 给足额度避免答案/评分被截断（曾导致答案为空 → 后面采分点全 0 → 误判低分）
 const ANSWER_MAX_TOKENS = 8000
 const JUDGE_MAX_TOKENS = 4000
+const ADVICE_MAX_TOKENS = 300
 const REQ_TIMEOUT_MS = 55000
 
 // 与线下评测 (run_eval.py / rejudge.py) 保持同一套提示词，保证估分口径一致。
@@ -41,16 +44,37 @@ ${answer}
 采分点 (rubric)，每条 desc 即为该点的权威关键事实/评分标准:
 ${rubricJson}
 
-请按以下 JSON 模式输出：
-- items：对每条采分点给出 awarded 分数(0~max_score)和简短 reason；
-- advice：给"出题人"的一句简短建议（中文，≤30字，口吻平和；若这道题对强模型偏容易则提示可适当加难，否则简单肯定即可，不要出现任何分数/百分比）。
+请按以下 JSON 模式输出，对每条采分点给出 awarded 分数(0~max_score)和简短 reason:
 {
   "items": [
     {"index": 0, "awarded": <number>, "reason": "<=40字"}
-  ],
-  "advice": "一句话，<=30字"
+  ]
 }
 只输出 JSON，不要 think 块、不要 Markdown 围栏。`
+}
+
+// 第三步：拿着「分数 + 题目」单独生成一句针对性建议（分数只用于生成建议，不返回前端）
+const ADVICE_SYSTEM =
+  '你是科研出题顾问。这是一个考察顶尖 AI 能力的评测基准，目标是题目要能难住最强的 AI——AI 得分越低，题目越有区分度、越好。' +
+  '请根据 AI 试答的得分情况，给出题专家一句简短、礼貌、可操作的中文建议。'
+
+function advicePrompt(question, rubrics, earned, max, percent, missed) {
+  const rl = rubrics.map((r, i) => `${i + 1}. (${r.score}分) ${r.desc}`).join('\n')
+  const missedStr = missed.length ? `AI 未完全答到的采分点：第 ${missed.join('、')} 点` : 'AI 几乎答到了全部采分点'
+  return `题目:
+"""
+${question}
+"""
+
+采分点:
+${rl}
+
+AI 试答得分率约 ${percent.toFixed(0)}%（满分 ${max}，得 ${earned.toFixed(1)} 分）。${missedStr}。
+
+请给出题专家一句话建议（中文，≤40字，口吻平和专业）：
+- 若得分率偏高（说明这题对强 AI 太简单），请具体指出如何加难，例如要求更深的机制推理 / 定量数据 / 文献溯源，或补充更难命中的采分点。
+- 若得分率中等或偏低，简单肯定其难度即可。
+不要出现任何分数、百分比或数字。直接输出建议本身，不要解释、不要加引号。`
 }
 
 async function chat(messages, { model, maxTokens, temperature }) {
@@ -125,12 +149,31 @@ export async function POST(request) {
     )
 
     const parsed = extractJson(judgeRaw)
-    const { percent } = summarizeScores(rubrics, parsed.items || [])
+    const { perRubric, earned, max, percent } = summarizeScores(rubrics, parsed.items || [])
     const tier = tierFor(percent)
-    const advice = typeof parsed.advice === 'string' ? parsed.advice.trim().slice(0, 60) : ''
 
-    // 分数只记到服务端日志便于排查；响应只回 tier + 一句建议，前端不展示任何分数（顾及出题人体验）
-    console.log(`[estimate] ${ANSWER_MODEL} + ${JUDGE_MODEL} → ${percent.toFixed(0)}% ${tier}`)
+    // 第三步：拿着分数 + 题目，单独生成一句针对性建议（得分高就引导专家加难）
+    let advice = ''
+    try {
+      const missed = perRubric.filter((r) => r.awarded < r.max).map((r) => r.index + 1)
+      const adviceRaw = await chat(
+        [
+          { role: 'system', content: ADVICE_SYSTEM },
+          { role: 'user', content: advicePrompt(question, rubrics, earned, max, percent, missed) },
+        ],
+        { model: ADVICE_MODEL, maxTokens: ADVICE_MAX_TOKENS, temperature: 0.4 }
+      )
+      advice = String(adviceRaw || '')
+        .replace(/<think>[\s\S]*?<\/think>/g, '')
+        .replace(/^[\s"'「」]+|[\s"'「」]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 80)
+    } catch (e) {
+      console.error('Advice step failed (non-fatal):', e) // 建议失败不致命，前端按 tier 兜底
+    }
+
+    // 分数只记到服务端日志；响应只回 tier + 一句建议，前端不展示任何分数
+    console.log(`[estimate] ${ANSWER_MODEL}+${JUDGE_MODEL}+${ADVICE_MODEL} → ${percent.toFixed(0)}% ${tier} | ${advice}`)
 
     return NextResponse.json({ tier, advice })
   } catch (error) {
