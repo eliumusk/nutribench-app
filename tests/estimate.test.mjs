@@ -49,12 +49,12 @@ test('extractJson parses plain, fenced, think-wrapped, and trailing-prose output
   assert.equal(extractJson('好的，结果如下：\n{"items":[{"index":0,"awarded":3}]}\n谢谢').items[0].awarded, 3)
 })
 
-test('estimate API route does the two-step answer+judge against gpt-5.5', () => {
+test('estimate API route does the two-step answer+judge against gpt-5.4', () => {
   const route = readFileSync(new URL('../app/api/estimate/route.js', import.meta.url), 'utf8')
   assert.match(route, /ANSWER_MODEL/)
   assert.match(route, /JUDGE_MODEL/)
-  assert.match(route, /gpt-5\.5/)            // 默认试答模型
-  assert.match(route, /deepseek-v4-flash/)   // 默认评分模型（独立裁判）
+  assert.match(route, /deepseek-v4-flash/)   // 答题与评分都用 flash（Vercel 60s 内不超时）
+  assert.match(route, /advice/)              // 评分附带一句简短建议
   assert.match(route, /ANSWER_SYSTEM/)
   assert.match(route, /JUDGE_SYSTEM/)
   assert.match(route, /summarizeScores/)
@@ -67,5 +67,5 @@ test('submit page wires the estimate button and panel', () => {
   assert.match(page, /handleEstimate/)
   assert.match(page, /\/api\/estimate/)
   assert.match(page, /EstimatePanel/)
-  assert.match(page, /开始估分/)
+  assert.match(page, /难度自检/)
 })

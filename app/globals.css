@@ -289,7 +289,15 @@ body {
   padding: 12px 14px;
 }
 
-.estimate-result { display: flex; flex-direction: column; gap: 16px; }
+.estimate-result { padding: 16px 18px; border-radius: var(--radius); border: 1px solid; }
+.estimate-result.tier-simple { background: #fef2f2; border-color: #fca5a5; }
+.estimate-result.tier-mid { background: #fffbeb; border-color: #fcd34d; }
+.estimate-result.tier-good { background: var(--accent-light); border-color: var(--accent); }
+.estimate-msg { font-size: 15px; font-weight: 600; line-height: 1.7; }
+.estimate-result.tier-simple .estimate-msg { color: #b91c1c; }
+.estimate-result.tier-mid .estimate-msg { color: #92400e; }
+.estimate-result.tier-good .estimate-msg { color: #115e59; }
+.estimate-msg + .estimate-foot { margin-top: 8px; }
 
 .estimate-head {
   display: grid;

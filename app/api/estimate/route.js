@@ -7,12 +7,14 @@ export const dynamic = 'force-dynamic'
 
 const BASE_URL = process.env.ESTIMATE_BASE_URL || process.env.DEEPSEEK_BASE_URL || 'http://43.159.131.233:3001/v1'
 const API_KEY = process.env.ESTIMATE_API_KEY || process.env.DEEPSEEK_API_KEY || ''
-// 答题用强模型，评分用独立的 flash 模型：① 避免"自己答自己评" ② flash 更快、更省
-const ANSWER_MODEL = process.env.ESTIMATE_ANSWER_MODEL || process.env.ESTIMATE_MODEL || 'gpt-5.5'
+// 答题与评分都用 deepseek-v4-flash：实测唯一能在 Vercel 60s 内不超时的（答题约 18s）；
+// gpt-5.x / deepseek-*-thinking 这类推理模型答一道复杂题要 90s+，必被 Vercel 掐断。
+const ANSWER_MODEL = process.env.ESTIMATE_ANSWER_MODEL || process.env.ESTIMATE_MODEL || 'deepseek-v4-flash'
 const JUDGE_MODEL = process.env.ESTIMATE_JUDGE_MODEL || 'deepseek-v4-flash'
 
-const ANSWER_MAX_TOKENS = 1500
-const JUDGE_MAX_TOKENS = 2000
+// 给足额度避免答案/评分被截断（曾导致答案为空 → 后面采分点全 0 → 误判低分）
+const ANSWER_MAX_TOKENS = 8000
+const JUDGE_MAX_TOKENS = 4000
 const REQ_TIMEOUT_MS = 55000
 
 // 与线下评测 (run_eval.py / rejudge.py) 保持同一套提示词，保证估分口径一致。
@@ -39,11 +41,14 @@ ${answer}
 采分点 (rubric)，每条 desc 即为该点的权威关键事实/评分标准:
 ${rubricJson}
 
-请按以下 JSON 模式输出，对每条采分点给出 awarded 分数(0~max_score)和简短 reason:
+请按以下 JSON 模式输出：
+- items：对每条采分点给出 awarded 分数(0~max_score)和简短 reason；
+- advice：给"出题人"的一句简短建议（中文，≤30字，口吻平和；若这道题对强模型偏容易则提示可适当加难，否则简单肯定即可，不要出现任何分数/百分比）。
 {
   "items": [
-    {"index": 0, "awarded": <number>, "reason": "<<=40字>"}
-  ]
+    {"index": 0, "awarded": <number>, "reason": "<=40字"}
+  ],
+  "advice": "一句话，<=30字"
 }
 只输出 JSON，不要 think 块、不要 Markdown 围栏。`
 }
@@ -96,7 +101,7 @@ export async function POST(request) {
       return NextResponse.json({ error: '至少需要 1 个采分点才能估分' }, { status: 400 })
     }
 
-    // 第一步：让 gpt-5.5 以领域专家身份试答（只喂题面，保持与线下评测一致）
+    // 第一步：让答题模型以领域专家身份试答（只喂题面，保持与线下评测一致）
     const answer = await chat(
       [
         { role: 'system', content: ANSWER_SYSTEM },
@@ -120,18 +125,14 @@ export async function POST(request) {
     )
 
     const parsed = extractJson(judgeRaw)
-    const { perRubric, earned, max, percent } = summarizeScores(rubrics, parsed.items || [])
+    const { percent } = summarizeScores(rubrics, parsed.items || [])
+    const tier = tierFor(percent)
+    const advice = typeof parsed.advice === 'string' ? parsed.advice.trim().slice(0, 60) : ''
 
-    return NextResponse.json({
-      answerModel: ANSWER_MODEL,
-      judgeModel: JUDGE_MODEL,
-      earned,
-      max,
-      percent,
-      tier: tierFor(percent),
-      perRubric: perRubric.map((r) => ({ ...r, desc: rubrics[r.index].desc })),
-      answer,
-    })
+    // 分数只记到服务端日志便于排查；响应只回 tier + 一句建议，前端不展示任何分数（顾及出题人体验）
+    console.log(`[estimate] ${ANSWER_MODEL} + ${JUDGE_MODEL} → ${percent.toFixed(0)}% ${tier}`)
+
+    return NextResponse.json({ tier, advice })
   } catch (error) {
     const isTimeout = error?.name === 'AbortError'
     const msg = isTimeout ? '估分超时（模型响应过慢），请稍后重试' : `估分失败：${error?.message || error}`
