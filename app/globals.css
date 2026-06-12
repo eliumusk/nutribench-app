@@ -394,6 +394,12 @@ body {
 }
 
 .estimate-foot { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.estimate-scores { margin: 10px 0 6px; }
+.estimate-total { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.estimate-rubrics { display: flex; flex-direction: column; gap: 4px; }
+.estimate-rubric-item { display: flex; gap: 10px; font-size: 12.5px; line-height: 1.5; }
+.rubric-score { flex-shrink: 0; font-family: var(--mono); font-weight: 600; min-width: 52px; }
+.rubric-reason { color: var(--text-secondary); }
 
 @media (max-width: 640px) {
   .estimate-head { grid-template-columns: 1fr; }

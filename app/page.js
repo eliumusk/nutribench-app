@@ -23,11 +23,24 @@ const TIER_DISPLAY = {
   good: { cls: 'tier-good', icon: '✅', advice: '有挑战性，是道好题。' },
 }
 
-function EstimatePanel({ estimate }) {
+function EstimatePanel({ estimate, showScore }) {
   const t = TIER_DISPLAY[estimate.tier] || TIER_DISPLAY.moderate
   return (
     <div className={`estimate-result ${t.cls}`}>
       <div className="estimate-msg">{t.icon} {estimate.advice || t.advice}</div>
+      {showScore && estimate.max > 0 && (
+        <div className="estimate-scores">
+          <div className="estimate-total">AI 得分：{estimate.earned?.toFixed(1)} / {estimate.max} 分</div>
+          <div className="estimate-rubrics">
+            {(estimate.perRubric || []).map((r, i) => (
+              <div key={i} className="estimate-rubric-item">
+                <span className="rubric-score">{r.awarded}/{r.max}分</span>
+                <span className="rubric-reason">{r.reason || '—'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="estimate-foot">AI 难度自检 · 仅你可见，供出题参考</div>
     </div>
   )
@@ -360,10 +373,9 @@ export default function Home() {
             )}
           </div>
 
-          {!editingId && (
           <div className="form-section">
             <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <span>🤖 AI 难度自检 <span className="hint">提交前必做 · 仅你可见</span></span>
+              <span>🤖 AI 难度自检 <span className="hint">{editingId ? '可选' : '提交前必做 · 仅你可见'}</span></span>
               <button type="button" className="btn-estimate" onClick={handleEstimate} disabled={estimating}>
                 {estimating ? '自检中…（约 20–50 秒）' : (estimate ? '↻ 重新自检' : '▶ 开始自检')}
               </button>
@@ -371,7 +383,7 @@ export default function Home() {
 
             {!estimate && !estimating && (
               <div className="estimate-hint">
-                写完<strong>题目正文</strong>和<strong>采分点</strong>后点「开始自检」：AI 会试答这道题并对照采分点判断难度，给你<strong>一句简短建议</strong>（不展示分数、仅你可见）。<strong>需完成自检后才能提交。</strong>
+                写完<strong>题目正文</strong>和<strong>采分点</strong>后点「开始自检」：AI 会试答这道题并对照采分点判断难度，给你<strong>一段简短建议</strong>。{!editingId && <strong>需完成自检后才能提交。</strong>}
               </div>
             )}
 
@@ -379,9 +391,8 @@ export default function Home() {
               <div className="loading">🤖 正在做 AI 难度自检，请稍候…</div>
             )}
 
-            {estimate && <EstimatePanel estimate={estimate} />}
+            {estimate && <EstimatePanel estimate={estimate} showScore={!editingId} />}
           </div>
-          )}
 
           <div className="form-section">
             <h3>来源与出题人</h3>

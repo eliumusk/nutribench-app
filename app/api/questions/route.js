@@ -1,8 +1,35 @@
 import { Client } from '@notionhq/client'
 import { NextResponse } from 'next/server'
+import nodeFetch from 'node-fetch'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 
-const notion = new Client({ auth: process.env.NOTION_API_KEY })
+// node-fetch v2 的 agent 选项需要传函数而非实例
+const proxyAgent =
+  process.env.USE_PROXY === 'true' && process.env.PROXY_URL
+    ? new HttpsProxyAgent(process.env.PROXY_URL)
+    : undefined
+
+const fetchWithProxy = proxyAgent
+  ? (url, opts) => nodeFetch(url, { ...opts, agent: () => proxyAgent })
+  : undefined
+
+const notion = new Client({
+  auth: process.env.NOTION_API_KEY,
+  ...(fetchWithProxy ? { fetch: fetchWithProxy } : {}),
+})
 const databaseId = process.env.NOTION_DATABASE_ID
+
+async function notionRetry(fn, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (e) {
+      if (i === retries - 1 || e?.code !== 'ECONNRESET') throw e
+      console.warn(`[notion] ECONNRESET, retry ${i + 1}/${retries}`)
+      await new Promise((r) => setTimeout(r, 500 * (i + 1)))
+    }
+  }
+}
 
 const NOTION_TEXT_CHUNK = 2000
 const MAX_RUBRICS = 10
@@ -29,7 +56,7 @@ export async function GET() {
       }
       if (startCursor) query.start_cursor = startCursor
 
-      const response = await notion.databases.query(query)
+      const response = await notionRetry(() => notion.databases.query(query))
       results.push(...response.results)
 
       if (!response.has_more || !response.next_cursor) break
@@ -90,10 +117,10 @@ export async function POST(request) {
       }
     })
 
-    await notion.pages.create({
+    await notionRetry(() => notion.pages.create({
       parent: { database_id: databaseId },
       properties,
-    })
+    }))
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -133,7 +160,7 @@ export async function PATCH(request) {
       }
     }
 
-    await notion.pages.update({ page_id: data.id, properties })
+    await notionRetry(() => notion.pages.update({ page_id: data.id, properties }))
 
     return NextResponse.json({ success: true })
   } catch (error) {
