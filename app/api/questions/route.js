@@ -17,7 +17,7 @@ const notion = new Client({
   auth: process.env.NOTION_API_KEY,
   ...(fetchWithProxy ? { fetch: fetchWithProxy } : {}),
 })
-const databaseId = process.env.NOTION_DATABASE_ID
+const databaseId = process.env.QUESTION_DB_ID || process.env.NOTION_DATABASE_ID
 
 async function notionRetry(fn, retries = 3) {
   for (let i = 0; i < retries; i++) {

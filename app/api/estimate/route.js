@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { summarizeScores, tierFor, extractJson } from '../../../lib/estimate.mjs'
 
-// 两步 LLM 调用可能较慢，给足执行时间（Vercel Hobby 上限 60s，Pro 可调更高）。
-export const maxDuration = 60
+// 多步 LLM 调用可能较慢；Fluid Compute 下 Hobby 默认/最高可运行 300s。
+export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
 const ANSWER_BASE_URL = process.env.ANSWER_BASE_URL || process.env.ESTIMATE_BASE_URL || 'https://api.agtcloud.cn/v1'
